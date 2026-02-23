@@ -1,8 +1,17 @@
 import asyncio
+import contextlib
 from ssl import SSLContext
 from types import TracebackType
 from typing import (
-    Any, Awaitable, Dict, Literal, Optional, Tuple, Type, TypeVar, Union
+    Any,
+    Awaitable,
+    Dict,
+    Literal,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
 )
 
 
@@ -12,8 +21,12 @@ from pamqp.common import FieldTable
 from yarl import URL
 
 from .abc import (
-    AbstractChannel, AbstractConnection, ConnectionParameter, SSLOptions,
-    TimeoutType, UnderlayConnection,
+    AbstractChannel,
+    AbstractConnection,
+    ConnectionParameter,
+    SSLOptions,
+    TimeoutType,
+    UnderlayConnection,
 )
 from .channel import Channel
 from .exceptions import ConnectionClosed
@@ -26,7 +39,7 @@ CT = TypeVar("CT", bound=AbstractConnection)
 
 
 class Connection(AbstractConnection):
-    """ Connection abstraction """
+    """Connection abstraction"""
 
     CHANNEL_CLASS: Type[Channel] = Channel
     PARAMETERS: Tuple[ConnectionParameter, ...] = (
@@ -48,8 +61,13 @@ class Connection(AbstractConnection):
     def is_closed(self) -> bool:
         return self._closed.done()
 
+    @property
+    def close_called(self) -> bool:
+        return self._close_called
+
     async def close(
-        self, exc: Optional[aiormq.abc.ExceptionType] = ConnectionClosed,
+        self,
+        exc: Optional[aiormq.abc.ExceptionType] = ConnectionClosed,
     ) -> None:
         transport, self.transport = self.transport, None
         self._close_called = True
@@ -76,8 +94,11 @@ class Connection(AbstractConnection):
         return result
 
     def __init__(
-        self, url: URL, loop: Optional[asyncio.AbstractEventLoop] = None,
-        ssl_context: Optional[SSLContext] = None, **kwargs: Any,
+        self,
+        url: URL,
+        loop: Optional[asyncio.AbstractEventLoop] = None,
+        ssl_context: Optional[SSLContext] = None,
+        **kwargs: Any,
     ):
         self.loop = loop or asyncio.get_event_loop()
         self.transport = None
@@ -114,7 +135,7 @@ class Connection(AbstractConnection):
         self.connected.set()
 
     async def connect(self, timeout: TimeoutType = None) -> None:
-        """ Connect to AMQP server. This method should be called after
+        """Connect to AMQP server. This method should be called after
         :func:`aio_pika.connection.Connection.__init__`
 
         .. note::
@@ -123,8 +144,10 @@ class Connection(AbstractConnection):
 
         """
         self.transport = await UnderlayConnection.connect(
-            self.url, self._on_connection_close,
-            timeout=timeout, **self.kwargs,
+            self.url,
+            self._on_connection_close,
+            timeout=timeout,
+            **self.kwargs,
         )
         await self._on_connected()
 
@@ -134,7 +157,7 @@ class Connection(AbstractConnection):
         publisher_confirms: bool = True,
         on_return_raises: bool = False,
     ) -> AbstractChannel:
-        """ Coroutine which returns new instance of :class:`Channel`.
+        """Coroutine which returns new instance of :class:`Channel`.
 
         Example:
 
@@ -206,13 +229,11 @@ class Connection(AbstractConnection):
         await self.connected.wait()
 
     def __del__(self) -> None:
-        if (
-            self.is_closed or
-            self.loop.is_closed()
-        ):
-            return
+        with contextlib.suppress(AttributeError, RuntimeError):
+            if self.is_closed or self.loop.is_closed():
+                return
 
-        asyncio.ensure_future(self.close())
+            asyncio.ensure_future(self.close())
 
     async def __aenter__(self) -> "Connection":
         return self
@@ -226,14 +247,19 @@ class Connection(AbstractConnection):
         await self.close()
 
     async def update_secret(
-        self, new_secret: str, *,
-        reason: str = "", timeout: TimeoutType = None,
+        self,
+        new_secret: str,
+        *,
+        reason: str = "",
+        timeout: TimeoutType = None,
     ) -> aiormq.spec.Connection.UpdateSecretOk:
         if self.transport is None:
             raise RuntimeError("Connection is not ready")
 
         result = await self.transport.connection.update_secret(
-            new_secret=new_secret, reason=reason, timeout=timeout,
+            new_secret=new_secret,
+            reason=reason,
+            timeout=timeout,
         )
         self.url = self.url.with_password(new_secret)
         return result
@@ -293,7 +319,7 @@ async def connect(
     connection_class: Type[CT] = Connection,
     **kwargs: Any,
 ) -> CT:
-    """ Make connection to the broker.
+    """Make connection to the broker.
 
     Example:
 

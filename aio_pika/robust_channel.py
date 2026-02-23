@@ -8,8 +8,11 @@ from warnings import warn
 import aiormq
 
 from .abc import (
-    AbstractConnection, AbstractRobustChannel, AbstractRobustExchange,
-    AbstractRobustQueue, TimeoutType,
+    AbstractConnection,
+    AbstractRobustChannel,
+    AbstractRobustExchange,
+    AbstractRobustQueue,
+    TimeoutType,
 )
 from .channel import Channel
 from .exchange import Exchange, ExchangeType
@@ -24,7 +27,7 @@ log = get_logger(__name__)
 
 
 class RobustChannel(Channel, AbstractRobustChannel):
-    """ Channel abstraction """
+    """Channel abstraction"""
 
     QUEUE_CLASS: Type[Queue] = RobustQueue
     EXCHANGE_CLASS: Type[Exchange] = RobustExchange
@@ -95,19 +98,16 @@ class RobustChannel(Channel, AbstractRobustChannel):
             self.__restored.set()
 
     async def _on_close(
-        self,
-        closing: asyncio.Future
+        self, closing: asyncio.Future
     ) -> Optional[BaseException]:
         exc = await super()._on_close(closing)
 
         if isinstance(exc, asyncio.CancelledError):
-            # This happens only if the channel is forced to close from the
-            # outside, for example, if the connection is closed.
-            # Of course, here you need to exit from this function
-            # as soon as possible and to avoid a recovery attempt.
+            # Connection forced close (e.g., stuck connection).
+            # Clear restored but do NOT set _closed - the robust connection
+            # will restore this channel via restore() -> reopen() -> _open()
+            # which properly handles _closed state reset.
             self.__restored.clear()
-            if not self._closed.done():
-                self._closed.set_result(True)
             return exc
 
         in_restore_state = not self.__restored.is_set()
@@ -205,17 +205,15 @@ class RobustChannel(Channel, AbstractRobustChannel):
         if passive and name in self._exchanges:
             return self._exchanges[name]
 
-        exchange = (
-            await super().declare_exchange(
-                name=name,
-                type=type,
-                durable=durable,
-                auto_delete=auto_delete,
-                internal=internal,
-                passive=passive,
-                arguments=arguments,
-                timeout=timeout,
-            )
+        exchange = await super().declare_exchange(
+            name=name,
+            type=type,
+            durable=durable,
+            auto_delete=auto_delete,
+            internal=internal,
+            passive=passive,
+            arguments=arguments,
+            timeout=timeout,
         )
         exchange = cast(AbstractRobustExchange, exchange)
 

@@ -18,8 +18,10 @@ async def main() -> None:
         channel = await connection.channel()
         await channel.set_qos(prefetch_count=1)
 
+        # docs: begin-exchange-and-binding
         logs_exchange = await channel.declare_exchange(
-            "logs", ExchangeType.FANOUT,
+            "logs",
+            ExchangeType.FANOUT,
         )
 
         # Declaring queue
@@ -27,6 +29,7 @@ async def main() -> None:
 
         # Binding the queue to the exchange
         await queue.bind(logs_exchange)
+        # docs: end-exchange-and-binding
 
         # Start listening the queue
         await queue.consume(on_message)
